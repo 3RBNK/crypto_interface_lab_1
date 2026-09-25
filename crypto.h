@@ -54,6 +54,7 @@ typedef struct {
 	BYTE* cipher_text;
 	BYTE* key_object;
 	BYTE* iv;
+	BYTE* iv_copy;
 } DecryptContext;
 
 
