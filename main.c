@@ -7,11 +7,11 @@
 #include<windows.h>
 #include<bcrypt.h>
 #include<stdio.h>
+#include<stdlib.h>
 
 #pragma  comment(lib, "bcrypt.lib")
 
 #define STATUS_UNSUCCESSFUL ((NTSTATUS)0xC0000001L)
-#define MAX_PATH_LEN 512
 
 
 typedef struct {
@@ -91,6 +91,82 @@ void init_decrypt_args(DecryptArgs* dc_args,
 }
 
 
+int read_file(const char* path, BYTE** buffer, DWORD* size) {
+	FILE* file = NULL;
+
+	if (fopen_s(&file, path, "rb") != 0 || file == NULL) {
+		printf("Cannot open file for reading: %s\n", path);
+		return 0;
+	}
+
+	fseek(file, 0, SEEK_END);
+
+	long file_size = ftell(file);
+
+	if (file_size < 0) {
+		fclose(file);
+		return 0;
+	}
+
+	rewind(file);
+
+	*buffer = (BYTE*)malloc(file_size);
+
+	if (*buffer == NULL) {
+		fclose(file);
+		return 0;
+	}
+
+	size_t bytes_read = fread(
+		*buffer,
+		1,
+		file_size,
+		file
+	);
+
+	fclose(file);
+
+	if (bytes_read != (size_t)file_size) {
+		free(*buffer);
+		*buffer = NULL;
+		return 0;
+	}
+
+	*size = (DWORD)file_size;
+
+	return 1;
+}
+
+int write_file(const char* path, BYTE* buffer, DWORD size) {
+	FILE* file = NULL;
+
+	if (fopen_s(&file, path, "wb") != 0 || file == NULL) {
+		printf("Cannot open file for writing: %s\n", path);
+		return 0;
+	}
+
+	size_t bytes_written = fwrite(
+		buffer,
+		1,
+		size,
+		file
+	);
+
+	fclose(file);
+
+	if (bytes_written != size) {
+		return 0;
+	}
+
+	return 1;
+}
+
+
+NTSTATUS generate_key(const KeygenArgs* kg_args);
+NTSTATUS encrypt_file(const EncryptArgs* en_args);
+NTSTATUS decrypt_file(const DecryptArgs* dc_args);
+
+
 int main(int argc, char* argv[]) {
 	FunctionType fn_type = get_func_type(argv[1]);
 
@@ -99,17 +175,23 @@ int main(int argc, char* argv[]) {
 			KeygenArgs kg_args;
 			init_keygen_args(&kg_args, argv[2]);
 
+			NTSTATUS status = generate_key(&kg_args);
+
 			break;
 		}
 		case encrypt: {
 			EncryptArgs en_args;
 			init_encrypt_args(&en_args, argv[2], argv[3], argv[4], argv[5], argv[6]);
 
+			NTSTATUS status = encrypt_file(&en_args);
+
 			break;
 		}
 		case decrypt: {
 			DecryptArgs dc_args;
 			init_decrypt_args(&dc_args, argv[2], argv[3], argv[4], argv[5], argv[6]);
+
+			NTSTATUS status = decrypt_file(&dc_args);
 
 			break;
 		}
