@@ -11,6 +11,8 @@
 
 #pragma  comment(lib, "bcrypt.lib")
 
+#define AES_KEY_SIZE 16
+#define NT_SUCCESS(Status) (((NTSTATUS)(Status)) >= 0)
 #define STATUS_UNSUCCESSFUL ((NTSTATUS)0xC0000001L)
 
 
@@ -162,9 +164,40 @@ int write_file(const char* path, BYTE* buffer, DWORD size) {
 }
 
 
-NTSTATUS generate_key(const KeygenArgs* kg_args);
-NTSTATUS encrypt_file(const EncryptArgs* en_args);
-NTSTATUS decrypt_file(const DecryptArgs* dc_args);
+NTSTATUS generate_key(const KeygenArgs* kg_args) {
+	BYTE key[AES_KEY_SIZE];
+
+	NTSTATUS status = BCryptGenRandom(
+		NULL,
+		key,
+		AES_KEY_SIZE,
+		BCRYPT_USE_SYSTEM_PREFERRED_RNG
+	);
+
+	if (!NT_SUCCESS(status)) {
+		printf("BCryptGenRandom failed: %x\n", status);
+		return status;
+	}
+
+	if (!write_file(
+		kg_args->key_out,
+		key,
+		AES_KEY_SIZE
+	)) {
+		printf("Failed to write key to file\n");
+		return STATUS_UNSUCCESSFUL;
+	}
+
+	return status;
+}
+
+
+NTSTATUS encrypt_file(const EncryptArgs* en_args) {
+	return STATUS_UNSUCCESSFUL;
+}
+NTSTATUS decrypt_file(const DecryptArgs* dc_args) {
+	return STATUS_UNSUCCESSFUL;
+}
 
 
 int main(int argc, char* argv[]) {
