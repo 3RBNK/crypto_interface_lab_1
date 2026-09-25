@@ -16,7 +16,7 @@ void init_decrypt_args(DecryptArgs* dc_args,
 }
 
 
-NTSTATUS decrypt_file(const DecryptArgs* dc_args) {
+NTSTATUS decrypt_file(const DecryptArgs* args) {
 	return STATUS_UNSUCCESSFUL;
 }
 

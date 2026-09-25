@@ -142,7 +142,7 @@
     <ClCompile Include="crypto_interface.cpp" />
     <ClCompile Include="decrypt.c" />
     <ClCompile Include="encrypt.c" />
-    <ClCompile Include="file_utils.c" />
+    <ClCompile Include="utils.c" />
     <ClCompile Include="keygen.c" />
     <ClCompile Include="main.c" />
   </ItemGroup>

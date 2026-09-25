@@ -82,10 +82,11 @@ void init_decrypt_args(DecryptArgs* dc_args,
 	                   const char* file_out);
 
 
-NTSTATUS generate_key(const KeygenArgs* kg_args);
-NTSTATUS encrypt_file(const EncryptArgs* en_args);
-NTSTATUS decrypt_file(const DecryptArgs* dc_args);
+NTSTATUS generate_key(const KeygenArgs* args);
+NTSTATUS encrypt_file(const EncryptArgs* args);
+NTSTATUS decrypt_file(const DecryptArgs* args);
 
+NTSTATUS set_chain_mode(BCRYPT_ALG_HANDLE h_alg, const char* mode);
 
 void free_encrypt_context(EncryptContext* ctx);
 void free_decrypt_context(DecryptContext* ctx);

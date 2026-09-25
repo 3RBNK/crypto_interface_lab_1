@@ -30,7 +30,7 @@
     <ClCompile Include="decrypt.c">
       <Filter>Исходные файлы</Filter>
     </ClCompile>
-    <ClCompile Include="file_utils.c">
+    <ClCompile Include="utils.c">
       <Filter>Исходные файлы</Filter>
     </ClCompile>
   </ItemGroup>

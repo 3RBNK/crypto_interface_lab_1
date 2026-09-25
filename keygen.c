@@ -7,7 +7,7 @@ void init_keygen_args(KeygenArgs* kg_args, const char* key_out) {
 }
 
 
-NTSTATUS generate_key(const KeygenArgs* kg_args) {
+NTSTATUS generate_key(const KeygenArgs* args) {
 	BYTE key[AES_KEY_SIZE];
 
 	NTSTATUS status = BCryptGenRandom(
@@ -23,7 +23,7 @@ NTSTATUS generate_key(const KeygenArgs* kg_args) {
 	}
 
 	if (!write_file(
-		kg_args->key_out,
+		args->key_out,
 		key,
 		AES_KEY_SIZE
 	)) {
