@@ -1,6 +1,7 @@
 #include "crypto.h"
 #include <stdio.h>
 
+
 void init_encrypt_args(EncryptArgs* en_args,
 	                   const char* mode,
 	                   const char* key_in,
@@ -17,4 +18,22 @@ void init_encrypt_args(EncryptArgs* en_args,
 
 NTSTATUS encrypt_file(const EncryptArgs* en_args) {
 	return STATUS_UNSUCCESSFUL;
+}
+
+
+void free_encrypt_context(EncryptContext* ctx) {
+	if (ctx->h_key) {
+		BCryptDestroyKey(ctx->h_key);
+	}
+
+	if (ctx->h_alg) {
+		BCryptCloseAlgorithmProvider(ctx->h_alg, 0);
+	}
+
+	free(ctx->key);
+	(ctx->plain_text);
+	(ctx->cipher_text);
+	(ctx->key_object);
+	(ctx->iv);
+	(ctx->iv_copy);
 }

@@ -65,6 +65,7 @@ int read_file(const char* path, BYTE** buffer, DWORD* size) {
 	return 1;
 }
 
+
 int write_file(const char* path, BYTE* buffer, DWORD size) {
 	FILE* file = NULL;
 
