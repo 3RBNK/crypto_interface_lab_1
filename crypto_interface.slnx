@@ -1,0 +1,7 @@
+<Solution>
+  <Configurations>
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Project Path="crypto_interface.vcxproj" Id="a2114d90-51a3-4b57-8fa9-c0127dcec5f4" />
+</Solution>
