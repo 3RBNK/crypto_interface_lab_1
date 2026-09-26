@@ -18,7 +18,17 @@ FunctionType get_func_type(const char* arg) {
 	return func_type;
 }
 
-
+/**
+ * @brief Считывает всё содержимое файла в память.
+ *
+ * @param path Путь к считываемому файлу.
+ * @param buffer Указатель на переменную, в которую будет записан
+ *               адрес выделенного буфера с содержимым файла.
+ * @param size Указатель на переменную, в которую будет записан
+ *             размер файла в байтах.
+ *
+ * @return 1 при успешном чтении файла, 0 при возникновении ошибки.
+ */
 int read_file(const char* path, BYTE** buffer, DWORD* size) {
 	FILE* file = NULL;
 
@@ -66,6 +76,15 @@ int read_file(const char* path, BYTE** buffer, DWORD* size) {
 }
 
 
+/**
+ * @brief Записывает содержимое буфера в файл.
+ *
+ * @param path Путь к файлу для записи.
+ * @param buffer Указатель на буфер с записываемыми данными.
+ * @param size Размер записываемых данных в байтах.
+ *
+ * @return 1 при успешной записи файла, 0 при возникновении ошибки.
+ */
 int write_file(const char* path, BYTE* buffer, DWORD size) {
 	FILE* file = NULL;
 

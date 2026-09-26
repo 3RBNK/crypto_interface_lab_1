@@ -92,7 +92,6 @@ NTSTATUS set_chain_mode(BCRYPT_ALG_HANDLE h_alg, const char* mode);
 void free_encrypt_context(EncryptContext* ctx);
 void free_decrypt_context(DecryptContext* ctx);
 
-
 int read_file(const char* path, BYTE** buffer, DWORD* size);
 int write_file(const char* path, BYTE* buffer, DWORD size);
 
