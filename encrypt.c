@@ -191,6 +191,25 @@ NTSTATUS encrypt_file(const EncryptArgs* args) {
 		return status;
 	}
 
+	if (strcmp(args->mode, "CFB") == 0) {
+		DWORD message_block_length = block_size;
+
+		status = BCryptSetProperty(
+			ctx.h_key,
+			BCRYPT_MESSAGE_BLOCK_LENGTH,
+			(PUCHAR)&message_block_length,
+			sizeof(DWORD),
+			0
+		);
+
+		if (!NT_SUCCESS(status)) {
+			printf("BCryptSetProperty MESSAGE_BLOCK_LENGTH failed: 0x%08X\n",
+				(unsigned int)status);
+
+			free_encrypt_context(&ctx);
+			return status;
+		}
+	}
 
 	if (uses_iv) {
 		memcpy(ctx.iv_copy, ctx.iv, block_size);
