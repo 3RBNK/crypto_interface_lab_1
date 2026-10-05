@@ -143,6 +143,7 @@ NTSTATUS encrypt_file(const EncryptArgs* args) {
 		return status;
 	}
 
+	printf("length block: %d", block_size);
 
 	if (uses_iv) {
 		ctx.iv = (BYTE*)malloc(block_size);

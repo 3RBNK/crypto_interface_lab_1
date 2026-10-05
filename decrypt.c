@@ -239,7 +239,6 @@ NTSTATUS decrypt_file(const DecryptArgs* args) {
 		return STATUS_UNSUCCESSFUL;
 	}
 
-
 	printf("Decryption successful\n");
 
 

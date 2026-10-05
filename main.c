@@ -40,7 +40,7 @@ int main(int argc, char* argv[]) {
 			);
 
 			NTSTATUS status = decrypt_file(&dc_args);
-
+			printf("decrypt code status: %d", status);
 			break;
 		}
 		case invalid: {
