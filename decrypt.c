@@ -104,6 +104,11 @@ NTSTATUS decrypt_file(const DecryptArgs* args) {
 		return status;
 	}
 
+	printf(
+		"Set CFB block length status: 0x%08X\n",
+		(unsigned int)status
+	);
+
 
 	status = BCryptGetProperty(
 		ctx.h_alg,
@@ -118,6 +123,12 @@ NTSTATUS decrypt_file(const DecryptArgs* args) {
 		return status;
 	}
 
+	printf(
+		"Decrypt size status: 0x%08X, cipher=%lu, plain=%lu\n",
+		(unsigned int)status,
+		cipher_text_size,
+		plain_text_size
+	);
 
 	ctx.key_object = (BYTE*)malloc(key_object_size);
 	if (ctx.key_object == NULL) {
@@ -138,6 +149,12 @@ NTSTATUS decrypt_file(const DecryptArgs* args) {
 		free_decrypt_context(&ctx);
 		return status;
 	}
+
+	printf(
+		"Decrypt data status: 0x%08X, result=%lu\n",
+		(unsigned int)status,
+		result_size
+	);
 
 
 	if (uses_iv) {
@@ -195,7 +212,7 @@ NTSTATUS decrypt_file(const DecryptArgs* args) {
 		}
 	}
 
-	ULONG decrypt_flags = BCRYPT_BLOCK_PADDING;
+	ULONG decrypt_flags = 0;
 
 	if (uses_iv) {
 		memcpy(ctx.iv_copy, ctx.iv, block_size);
