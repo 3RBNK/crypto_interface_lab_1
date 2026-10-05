@@ -321,30 +321,22 @@ NTSTATUS decrypt_file(const DecryptArgs* args) {
 		return status;
 	}
 
-	if (strcmp(args->mode, "CFB") == 0) {
-		DWORD message_block_length = block_size;
+	status = BCryptSetProperty(
+		ctx.h_key,
+		BCRYPT_MESSAGE_BLOCK_LENGTH,
+		(PUCHAR)&block_size,
+		sizeof(DWORD),
+		0
+	);
 
-		status = BCryptSetProperty(
-			ctx.h_key,
-			BCRYPT_MESSAGE_BLOCK_LENGTH,
-			(PUCHAR)&message_block_length,
-			sizeof(DWORD),
-			0
-		);
-
-		if (!NT_SUCCESS(status)) {
-			free_decrypt_context(&ctx);
-			return status;
-		}
+	if (!NT_SUCCESS(status)) {
+		free_decrypt_context(&ctx);
+		return status;
 	}
-
-	ULONG decrypt_flags = BCRYPT_BLOCK_PADDING;
 
 	if (uses_iv) {
 		memcpy(ctx.iv_copy, ctx.iv, block_size);
 	}
-
-
 
 	status = BCryptDecrypt(
 		ctx.h_key,
@@ -356,7 +348,7 @@ NTSTATUS decrypt_file(const DecryptArgs* args) {
 		NULL,
 		0,
 		&plain_text_size,
-		decrypt_flags
+		BCRYPT_BLOCK_PADDING
 	);
 
 	if (!NT_SUCCESS(status)) {
@@ -387,7 +379,7 @@ NTSTATUS decrypt_file(const DecryptArgs* args) {
 		ctx.plain_text,
 		plain_text_size,
 		&result_size,
-		decrypt_flags
+		BCRYPT_BLOCK_PADDING
 	);
 
 	if (!NT_SUCCESS(status)) {
