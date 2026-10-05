@@ -197,10 +197,6 @@ NTSTATUS decrypt_file(const DecryptArgs* args) {
 
 	ULONG decrypt_flags = BCRYPT_BLOCK_PADDING;
 
-	if (strcmp(args->mode, "CFB") == 0) {
-		decrypt_flags = 0;
-	}
-
 	if (uses_iv) {
 		memcpy(ctx.iv_copy, ctx.iv, block_size);
 	}
