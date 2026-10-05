@@ -9,6 +9,7 @@
 #define AES_KEY_SIZE 16
 #define NT_SUCCESS(Status) (((NTSTATUS)(Status)) >= 0)
 #define STATUS_UNSUCCESSFUL ((NTSTATUS)0xC0000001L)
+#define STATUS_SUCCESS ((NTSTATUS)0xC00000000)
 
 
 typedef struct {

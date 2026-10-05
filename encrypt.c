@@ -161,7 +161,6 @@ NTSTATUS encrypt_file(const EncryptArgs* args) {
 			return STATUS_UNSUCCESSFUL;
 		}
 
-
 		status = BCryptGenRandom(
 			NULL,
 			ctx.iv,
@@ -203,9 +202,6 @@ NTSTATUS encrypt_file(const EncryptArgs* args) {
 		);
 
 		if (!NT_SUCCESS(status)) {
-			printf("BCryptSetProperty MESSAGE_BLOCK_LENGTH failed: 0x%08X\n",
-				(unsigned int)status);
-
 			free_encrypt_context(&ctx);
 			return status;
 		}

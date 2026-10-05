@@ -16,6 +16,104 @@ void init_decrypt_args(DecryptArgs* dc_args,
 }
 
 
+static NTSTATUS decrypt_cfb128(
+	DecryptContext* ctx,
+	DWORD key_size,
+	DWORD cipher_text_size,
+	DWORD block_size,
+	DWORD key_object_size
+) {
+	if (block_size != 16) {
+		return STATUS_UNSUCCESSFUL;
+	}
+
+	NTSTATUS status;
+	LPCWSTR ecb_mode = BCRYPT_CHAIN_MODE_ECB;
+
+	status = BCryptSetProperty(
+		ctx->h_alg,
+		BCRYPT_CHAINING_MODE,
+		(PBYTE)ecb_mode,
+		(ULONG)(wcslen(ecb_mode) + 1) * sizeof(WCHAR),
+		0
+	);
+
+	if (!NT_SUCCESS(status)) {
+		return status;
+	}
+
+	status = BCryptGenerateSymmetricKey(
+		ctx->h_alg,
+		&ctx->h_key,
+		ctx->key_object,
+		key_object_size,
+		ctx->key,
+		key_size,
+		0
+	);
+
+	if (!NT_SUCCESS(status)) {
+		return status;
+	}
+
+	ctx->plain_text = (BYTE*)malloc(cipher_text_size);
+
+	if (ctx->plain_text == NULL) {
+		return STATUS_UNSUCCESSFUL;
+	}
+
+	BYTE feedback[16];
+	BYTE gamma[16];
+
+	memcpy(feedback, ctx->iv, block_size);
+
+	DWORD offset = 0;
+
+	while (offset < cipher_text_size) {
+		DWORD gamma_size = 0;
+
+		status = BCryptEncrypt(
+			ctx->h_key,
+			feedback,
+			block_size,
+			NULL,
+			NULL,
+			0,
+			gamma,
+			block_size,
+			&gamma_size,
+			0
+		);
+
+		if (!NT_SUCCESS(status)) {
+			return status;
+		}
+
+		DWORD chunk_size = cipher_text_size - offset;
+
+		if (chunk_size > block_size) {
+			chunk_size = block_size;
+		}
+
+		for (DWORD i = 0; i < chunk_size; i++) {
+			ctx->plain_text[offset + i] =
+				ctx->cipher_text[offset + i] ^ gamma[i];
+		}
+
+		if (chunk_size == block_size) {
+			memcpy(
+				feedback,
+				ctx->cipher_text + offset,
+				block_size
+			);
+		}
+
+		offset += chunk_size;
+	}
+
+	return STATUS_SUCCESS;
+}
+
 /**
  * @brief Расшифровывает содержимое зашифрованного файла с использованием AES.
  *
@@ -179,6 +277,34 @@ NTSTATUS decrypt_file(const DecryptArgs* args) {
 		}
 	}
 
+	if (strcmp(args->mode, "CFB") == 0) {
+		status = decrypt_cfb128(
+			&ctx,
+			key_size,
+			cipher_text_size,
+			block_size,
+			key_object_size
+		);
+
+		if (!NT_SUCCESS(status)) {
+			free_decrypt_context(&ctx);
+			return status;
+		}
+
+		if (!write_file(
+			args->file_out,
+			ctx.plain_text,
+			cipher_text_size
+		)) {
+			free_decrypt_context(&ctx);
+			return STATUS_UNSUCCESSFUL;
+		}
+
+		printf("Decryption successful\n");
+
+		free_decrypt_context(&ctx);
+		return STATUS_SUCCESS;
+	}
 
 	status = BCryptGenerateSymmetricKey(
 		ctx.h_alg,
@@ -212,7 +338,7 @@ NTSTATUS decrypt_file(const DecryptArgs* args) {
 		}
 	}
 
-	ULONG decrypt_flags = 0;
+	ULONG decrypt_flags = BCRYPT_BLOCK_PADDING;
 
 	if (uses_iv) {
 		memcpy(ctx.iv_copy, ctx.iv, block_size);
