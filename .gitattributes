@@ -2,6 +2,10 @@
 # Set default behavior to automatically normalize line endings.
 ###############################################################################
 * text=auto
+*.cmd text eol=crlf
+*.bin binary
+# This plaintext is compared byte-for-byte with decrypted enc_cfb.bin.
+result2.txt text eol=lf
 
 ###############################################################################
 # Set default behavior for command prompt diff.

@@ -2,14 +2,24 @@
 #include "crypto.h"
 
 int main(int argc, char* argv[]) {
+	NTSTATUS status = STATUS_UNSUCCESSFUL;
+	if (argc < 2) {
+		fprintf(stderr, "Usage: crypto keygen KEY | crypto encrypt|decrypt MODE KEY INPUT IV OUTPUT\n");
+		return EXIT_FAILURE;
+	}
 	FunctionType fn_type = get_func_type(argv[1]);
+	if ((fn_type == keygen && argc != 3) ||
+		((fn_type == encrypt || fn_type == decrypt) && argc != 7)) {
+		fprintf(stderr, "Usage: crypto keygen KEY | crypto encrypt|decrypt MODE KEY INPUT IV OUTPUT\n");
+		return EXIT_FAILURE;
+	}
 
 	switch(fn_type) {
 		case keygen: {
 			KeygenArgs kg_args;
 			init_keygen_args(&kg_args, argv[2]);
 
-			NTSTATUS status = generate_key(&kg_args);
+			status = generate_key(&kg_args);
 
 			break;
 		}
@@ -24,7 +34,7 @@ int main(int argc, char* argv[]) {
 				argv[6]
 			);
 
-			NTSTATUS status = encrypt_file(&en_args);
+			status = encrypt_file(&en_args);
 
 			break;
 		}
@@ -39,8 +49,7 @@ int main(int argc, char* argv[]) {
 				argv[6]
 			);
 
-			NTSTATUS status = decrypt_file(&dc_args);
-			printf("decrypt code status: %d", status);
+			status = decrypt_file(&dc_args);
 			break;
 		}
 		case invalid: {
@@ -50,5 +59,9 @@ int main(int argc, char* argv[]) {
 	}
 
 
-	return 0;
+	if (!NT_SUCCESS(status)) {
+		fprintf(stderr, "Operation failed: NTSTATUS=0x%08lX\n", (unsigned long)(ULONG)status);
+		return EXIT_FAILURE;
+	}
+	return EXIT_SUCCESS;
 }

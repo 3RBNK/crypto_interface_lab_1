@@ -52,14 +52,6 @@ NTSTATUS encrypt_file(const EncryptArgs* args) {
     int uses_iv = 0;
     int is_cfb = 0;
 
-    BYTE* padded_plain = NULL;
-    BYTE* encrypt_input = NULL;
-
-    DWORD encrypt_input_size = 0;
-    DWORD original_plain_size = 0;
-
-    ULONG encrypt_flags = BCRYPT_BLOCK_PADDING;
-
     if (strcmp(args->mode, "CBC") == 0) {
         chain_mode = BCRYPT_CHAIN_MODE_CBC;
         uses_iv = 1;
@@ -72,11 +64,6 @@ NTSTATUS encrypt_file(const EncryptArgs* args) {
         chain_mode = BCRYPT_CHAIN_MODE_CFB;
         uses_iv = 1;
         is_cfb = 1;
-
-        /*
-         * Для CFB padding не используем.
-         */
-        encrypt_flags = 0;
     }
     else {
         return STATUS_UNSUCCESSFUL;
@@ -113,8 +100,6 @@ NTSTATUS encrypt_file(const EncryptArgs* args) {
         free_encrypt_context(&ctx);
         return STATUS_UNSUCCESSFUL;
     }
-
-    original_plain_size = plain_text_size;
 
     /*
      * Открываем AES.
@@ -240,153 +225,52 @@ NTSTATUS encrypt_file(const EncryptArgs* args) {
         return status;
     }
 
-    /*
-     * CFB-128:
-     * размер feedback = размер блока AES = 16 байт.
-     */
     if (is_cfb) {
-        DWORD message_block_length = block_size;
-
-        status = BCryptSetProperty(
-            ctx.h_key,
-            BCRYPT_MESSAGE_BLOCK_LENGTH,
-            (PUCHAR)&message_block_length,
-            sizeof(DWORD),
-            0
-        );
-
+        /* CFB means CFB-128, not CNG's default CFB-8. */
+        DWORD message_block_length = AES_BLOCK_SIZE;
+        if (block_size != AES_BLOCK_SIZE) {
+            free_encrypt_context(&ctx);
+            return STATUS_UNSUCCESSFUL;
+        }
+        status = BCryptSetProperty(ctx.h_key, BCRYPT_MESSAGE_BLOCK_LENGTH,
+            (PUCHAR)&message_block_length, sizeof(message_block_length), 0);
         if (!NT_SUCCESS(status)) {
             free_encrypt_context(&ctx);
             return status;
         }
-    }
 
-    /*
-     * По умолчанию шифруем исходный plaintext.
-     */
-    encrypt_input = ctx.plain_text;
-    encrypt_input_size = plain_text_size;
-
-    /*
-     * BCryptEncrypt без BCRYPT_BLOCK_PADDING
-     * требует размер входа, кратный размеру блока.
-     *
-     * Поэтому для CFB-128 временно дополняем
-     * последний неполный блок нулями.
-     *
-     * После шифрования лишние байты ciphertext
-     * просто не сохраняются.
-     */
-    if (
-        is_cfb &&
-        plain_text_size % block_size != 0
-        ) {
-        DWORD padded_size =
-            ((plain_text_size + block_size - 1) /
-                block_size) *
-            block_size;
-
-        padded_plain = (BYTE*)calloc(
-            padded_size,
-            1
-        );
-
-        if (padded_plain == NULL) {
+        ctx.cipher_text = (BYTE*)malloc(plain_text_size ? plain_text_size : 1);
+        if (ctx.cipher_text == NULL) {
             free_encrypt_context(&ctx);
             return STATUS_UNSUCCESSFUL;
         }
-
-        memcpy(
-            padded_plain,
-            ctx.plain_text,
-            plain_text_size
-        );
-
-        encrypt_input = padded_plain;
-        encrypt_input_size = padded_size;
+        status = crypt_cfb128(ctx.h_key, ctx.plain_text, plain_text_size,
+            ctx.iv, ctx.cipher_text, 0);
+        result_size = plain_text_size;
     }
-
-    /*
-     * Перед первым BCryptEncrypt восстанавливаем IV.
-     */
-    if (uses_iv) {
-        memcpy(
-            ctx.iv_copy,
-            ctx.iv,
-            block_size
-        );
-    }
-
-    /*
-     * Первый вызов:
-     * узнаём размер выходного буфера.
-     */
-    status = BCryptEncrypt(
-        ctx.h_key,
-        encrypt_input,
-        encrypt_input_size,
-        NULL,
-        uses_iv ? ctx.iv_copy : NULL,
-        uses_iv ? block_size : 0,
-        NULL,
-        0,
-        &cipher_text_size,
-        encrypt_flags
-    );
-
-    if (!NT_SUCCESS(status)) {
-        if (padded_plain != NULL) {
-            free(padded_plain);
+    else {
+        if (uses_iv) {
+            memcpy(ctx.iv_copy, ctx.iv, block_size);
+        }
+        status = BCryptEncrypt(ctx.h_key, ctx.plain_text, plain_text_size,
+            NULL, uses_iv ? ctx.iv_copy : NULL, uses_iv ? block_size : 0,
+            NULL, 0, &cipher_text_size, BCRYPT_BLOCK_PADDING);
+        if (!NT_SUCCESS(status)) {
+            free_encrypt_context(&ctx);
+            return status;
         }
 
-        free_encrypt_context(&ctx);
-        return status;
-    }
-
-    ctx.cipher_text = (BYTE*)malloc(
-        cipher_text_size
-    );
-
-    if (ctx.cipher_text == NULL) {
-        if (padded_plain != NULL) {
-            free(padded_plain);
+        ctx.cipher_text = (BYTE*)malloc(cipher_text_size ? cipher_text_size : 1);
+        if (ctx.cipher_text == NULL) {
+            free_encrypt_context(&ctx);
+            return STATUS_UNSUCCESSFUL;
         }
-
-        free_encrypt_context(&ctx);
-        return STATUS_UNSUCCESSFUL;
-    }
-
-    /*
-     * Первый BCryptEncrypt мог изменить IV,
-     * поэтому снова восстанавливаем его.
-     */
-    if (uses_iv) {
-        memcpy(
-            ctx.iv_copy,
-            ctx.iv,
-            block_size
-        );
-    }
-
-    /*
-     * Фактическое шифрование.
-     */
-    status = BCryptEncrypt(
-        ctx.h_key,
-        encrypt_input,
-        encrypt_input_size,
-        NULL,
-        uses_iv ? ctx.iv_copy : NULL,
-        uses_iv ? block_size : 0,
-        ctx.cipher_text,
-        cipher_text_size,
-        &result_size,
-        encrypt_flags
-    );
-
-    if (padded_plain != NULL) {
-        free(padded_plain);
-        padded_plain = NULL;
+        if (uses_iv) {
+            memcpy(ctx.iv_copy, ctx.iv, block_size);
+        }
+        status = BCryptEncrypt(ctx.h_key, ctx.plain_text, plain_text_size,
+            NULL, uses_iv ? ctx.iv_copy : NULL, uses_iv ? block_size : 0,
+            ctx.cipher_text, cipher_text_size, &result_size, BCRYPT_BLOCK_PADDING);
     }
 
     if (!NT_SUCCESS(status)) {
@@ -408,29 +292,10 @@ NTSTATUS encrypt_file(const EncryptArgs* args) {
         }
     }
 
-    /*
-     * ECB / CBC:
-     * сохраняем весь result_size,
-     * включая padding.
-     *
-     * CFB:
-     * если вход временно дополнялся до полного блока,
-     * сохраняем только столько байт ciphertext,
-     * сколько было байт исходного plaintext.
-     */
-    DWORD write_size;
-
-    if (is_cfb) {
-        write_size = original_plain_size;
-    }
-    else {
-        write_size = result_size;
-    }
-
     if (!write_file(
         args->file_out,
         ctx.cipher_text,
-        write_size
+        result_size
     )) {
         free_encrypt_context(&ctx);
         return STATUS_UNSUCCESSFUL;

@@ -34,14 +34,6 @@ NTSTATUS decrypt_file(const DecryptArgs* args) {
     int uses_iv = 0;
     int is_cfb = 0;
 
-    BYTE* padded_cipher = NULL;
-    BYTE* decrypt_input = NULL;
-
-    DWORD decrypt_input_size = 0;
-    DWORD original_cipher_size = 0;
-
-    ULONG decrypt_flags = BCRYPT_BLOCK_PADDING;
-
     /*
      * Выбор режима.
      */
@@ -57,11 +49,6 @@ NTSTATUS decrypt_file(const DecryptArgs* args) {
         chain_mode = BCRYPT_CHAIN_MODE_CFB;
         uses_iv = 1;
         is_cfb = 1;
-
-        /*
-         * Для CFB padding PKCS#7 не используется.
-         */
-        decrypt_flags = 0;
     }
     else {
         return STATUS_UNSUCCESSFUL;
@@ -104,8 +91,6 @@ NTSTATUS decrypt_file(const DecryptArgs* args) {
         free_decrypt_context(&ctx);
         return STATUS_UNSUCCESSFUL;
     }
-
-    original_cipher_size = cipher_text_size;
 
     /*
      * Открываем AES.
@@ -232,197 +217,63 @@ NTSTATUS decrypt_file(const DecryptArgs* args) {
         return status;
     }
 
-    /*
-     * Для CFB используем полный блок AES:
-     * 16 байт = CFB-128.
-     */
     if (is_cfb) {
-        DWORD message_block_length = block_size;
-
-        status = BCryptSetProperty(
-            ctx.h_key,
-            BCRYPT_MESSAGE_BLOCK_LENGTH,
-            (PUCHAR)&message_block_length,
-            sizeof(DWORD),
-            0
-        );
-
+        /* CFB means CFB-128, not CNG's default CFB-8. */
+        DWORD message_block_length = AES_BLOCK_SIZE;
+        if (block_size != AES_BLOCK_SIZE) {
+            free_decrypt_context(&ctx);
+            return STATUS_UNSUCCESSFUL;
+        }
+        status = BCryptSetProperty(ctx.h_key, BCRYPT_MESSAGE_BLOCK_LENGTH,
+            (PUCHAR)&message_block_length, sizeof(message_block_length), 0);
         if (!NT_SUCCESS(status)) {
             free_decrypt_context(&ctx);
             return status;
         }
-    }
 
-    /*
-     * Обычно BCryptDecrypt получает исходный
-     * шифротекст напрямую.
-     */
-    decrypt_input = ctx.cipher_text;
-    decrypt_input_size = cipher_text_size;
-
-    /*
-     * Для CFB-128 BCryptDecrypt ожидает размер,
-     * кратный 16 байтам.
-     *
-     * Например:
-     *
-     * 1864 байта
-     *
-     * превращаем временно в:
-     *
-     * 1872 байта.
-     *
-     * Дополнительные байты заполняются нулями.
-     */
-    if (
-        is_cfb &&
-        cipher_text_size % block_size != 0
-        ) {
-        DWORD padded_size =
-            ((cipher_text_size + block_size - 1) /
-                block_size) *
-            block_size;
-
-        padded_cipher = (BYTE*)calloc(
-            padded_size,
-            1
-        );
-
-        if (padded_cipher == NULL) {
+        ctx.plain_text = (BYTE*)malloc(cipher_text_size ? cipher_text_size : 1);
+        if (ctx.plain_text == NULL) {
             free_decrypt_context(&ctx);
             return STATUS_UNSUCCESSFUL;
         }
-
-        memcpy(
-            padded_cipher,
-            ctx.cipher_text,
-            cipher_text_size
-        );
-
-        decrypt_input = padded_cipher;
-        decrypt_input_size = padded_size;
-    }
-
-    /*
-     * Перед первым вызовом восстанавливаем IV.
-     */
-    if (uses_iv) {
-        memcpy(
-            ctx.iv_copy,
-            ctx.iv,
-            block_size
-        );
-    }
-
-    /*
-     * Первый вызов BCryptDecrypt:
-     * узнаём необходимый размер выходного буфера.
-     */
-    status = BCryptDecrypt(
-        ctx.h_key,
-        decrypt_input,
-        decrypt_input_size,
-        NULL,
-        uses_iv ? ctx.iv_copy : NULL,
-        uses_iv ? block_size : 0,
-        NULL,
-        0,
-        &plain_text_size,
-        decrypt_flags
-    );
-
-    if (!NT_SUCCESS(status)) {
-        if (padded_cipher != NULL) {
-            free(padded_cipher);
-        }
-
-        free_decrypt_context(&ctx);
-        return status;
-    }
-
-    ctx.plain_text = (BYTE*)malloc(
-        plain_text_size
-    );
-
-    if (ctx.plain_text == NULL) {
-        if (padded_cipher != NULL) {
-            free(padded_cipher);
-        }
-
-        free_decrypt_context(&ctx);
-        return STATUS_UNSUCCESSFUL;
-    }
-
-    /*
-     * Первый BCryptDecrypt мог изменить IV.
-     * Перед фактическим дешифрованием снова
-     * копируем исходный IV.
-     */
-    if (uses_iv) {
-        memcpy(
-            ctx.iv_copy,
-            ctx.iv,
-            block_size
-        );
-    }
-
-    /*
-     * Фактическое дешифрование.
-     */
-    status = BCryptDecrypt(
-        ctx.h_key,
-        decrypt_input,
-        decrypt_input_size,
-        NULL,
-        uses_iv ? ctx.iv_copy : NULL,
-        uses_iv ? block_size : 0,
-        ctx.plain_text,
-        plain_text_size,
-        &result_size,
-        decrypt_flags
-    );
-
-    if (!NT_SUCCESS(status)) {
-        if (padded_cipher != NULL) {
-            free(padded_cipher);
-        }
-
-        free_decrypt_context(&ctx);
-        return status;
-    }
-
-    /*
-     * Временный дополненный шифротекст
-     * больше не нужен.
-     */
-    if (padded_cipher != NULL) {
-        free(padded_cipher);
-        padded_cipher = NULL;
-    }
-
-    /*
-     * ECB / CBC:
-     * записываем настоящий result_size,
-     * потому что BCryptDecrypt сам удалил padding.
-     *
-     * CFB:
-     * последние нули были добавлены только
-     * технически, поэтому записываем ровно
-     * исходное количество байтов.
-     */
-    DWORD write_size;
-
-    if (is_cfb) {
-        write_size = original_cipher_size;
+        status = crypt_cfb128(ctx.h_key, ctx.cipher_text, cipher_text_size,
+            ctx.iv, ctx.plain_text, 1);
+        result_size = cipher_text_size;
     }
     else {
-        write_size = result_size;
+        if (uses_iv) {
+            memcpy(ctx.iv_copy, ctx.iv, block_size);
+        }
+        status = BCryptDecrypt(ctx.h_key, ctx.cipher_text, cipher_text_size,
+            NULL, uses_iv ? ctx.iv_copy : NULL, uses_iv ? block_size : 0,
+            NULL, 0, &plain_text_size, BCRYPT_BLOCK_PADDING);
+        if (!NT_SUCCESS(status)) {
+            free_decrypt_context(&ctx);
+            return status;
+        }
+
+        ctx.plain_text = (BYTE*)malloc(plain_text_size ? plain_text_size : 1);
+        if (ctx.plain_text == NULL) {
+            free_decrypt_context(&ctx);
+            return STATUS_UNSUCCESSFUL;
+        }
+        if (uses_iv) {
+            memcpy(ctx.iv_copy, ctx.iv, block_size);
+        }
+        status = BCryptDecrypt(ctx.h_key, ctx.cipher_text, cipher_text_size,
+            NULL, uses_iv ? ctx.iv_copy : NULL, uses_iv ? block_size : 0,
+            ctx.plain_text, plain_text_size, &result_size, BCRYPT_BLOCK_PADDING);
+    }
+
+    if (!NT_SUCCESS(status)) {
+        free_decrypt_context(&ctx);
+        return status;
     }
 
     if (!write_file(
         args->file_out,
         ctx.plain_text,
-        write_size
+        result_size
     )) {
         free_decrypt_context(&ctx);
         return STATUS_UNSUCCESSFUL;

@@ -3,26 +3,36 @@
 
 
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <wchar.h>
 #include <windows.h>
 #include <bcrypt.h>
 
+#ifdef _MSC_VER
+#pragma comment(lib, "bcrypt.lib")
+#endif
+
 #define AES_KEY_SIZE 16
+#define AES_BLOCK_SIZE 16
+#ifndef NT_SUCCESS
 #define NT_SUCCESS(Status) (((NTSTATUS)(Status)) >= 0)
+#endif
 #define STATUS_UNSUCCESSFUL ((NTSTATUS)0xC0000001L)
 #define STATUS_SUCCESS ((NTSTATUS)0xC00000000)
 
 
 typedef struct {
-	char* key_out;
+	const char* key_out;
 } KeygenArgs;
 
 
 typedef struct {
-	char* mode;
-	char* key_in;
-	char* file_in;
-	char* iv_out;
-	char* file_out;
+	const char* mode;
+	const char* key_in;
+	const char* file_in;
+	const char* iv_out;
+	const char* file_out;
 } EncryptArgs;
 
 typedef struct {
@@ -39,11 +49,11 @@ typedef struct {
 
 
 typedef struct {
-	char* mode;
-	char* key_in;
-	char* file_in;
-	char* iv_in;
-	char* file_out;
+	const char* mode;
+	const char* key_in;
+	const char* file_in;
+	const char* iv_in;
+	const char* file_out;
 } DecryptArgs;
 
 typedef struct {
@@ -88,7 +98,9 @@ NTSTATUS generate_key(const KeygenArgs* args);
 NTSTATUS encrypt_file(const EncryptArgs* args);
 NTSTATUS decrypt_file(const DecryptArgs* args);
 
-NTSTATUS set_chain_mode(BCRYPT_ALG_HANDLE h_alg, const char* mode);
+/* One complete CFB-128 message; output must have input_size bytes. */
+NTSTATUS crypt_cfb128(BCRYPT_KEY_HANDLE h_key, BYTE* input, DWORD input_size,
+                     const BYTE* iv, BYTE* output, int decrypting);
 
 void free_encrypt_context(EncryptContext* ctx);
 void free_decrypt_context(DecryptContext* ctx);
